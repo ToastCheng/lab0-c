@@ -175,6 +175,76 @@ void q_reverse(queue_t *q)
     }
 }
 
+int comp(char *a, char *b)
+{
+    while (true) {
+        if (*a == '\0' && *b == '\0') {
+            return 0;
+        } else if (*a == '\0') {
+            return -1;
+        } else if (*b == '\0') {
+            return 1;
+        }
+        if (*a > *b) {
+            return 1;
+        } else if (*a < *b) {
+            return -1;
+        }
+        a++;
+        b++;
+    }
+}
+
+void merge(list_ele_t **result, list_ele_t *left, list_ele_t *right)
+{
+    while (left && right) {
+        if (comp(left->value, right->value) > 0) {
+            *result = right;
+            right = right->next;
+        } else {
+            *result = left;
+            left = left->next;
+        }
+        result = &((*result)->next);
+    }
+
+    while (left) {
+        *result = left;
+        left = left->next;
+        result = &((*result)->next);
+    }
+
+    while (right) {
+        *result = right;
+        right = right->next;
+        result = &((*result)->next);
+    }
+}
+
+void mergesort(list_ele_t **head)
+{
+    if ((*head)->next) {
+        list_ele_t *fast = *head;
+        list_ele_t *slow = *head;
+        list_ele_t *prev = NULL;
+
+        while (fast && fast->next) {
+            fast = fast->next->next;
+            prev = slow;
+            slow = slow->next;
+        }
+        if (prev)
+            prev->next = NULL;
+
+        mergesort(head);
+        mergesort(&slow);
+
+        list_ele_t *result = NULL;
+        merge(&result, *head, slow);
+        *head = result;
+    }
+}
+
 /*
  * Sort elements of queue in ascending order
  * No effect if q is NULL or empty. In addition, if q has only one
@@ -182,6 +252,12 @@ void q_reverse(queue_t *q)
  */
 void q_sort(queue_t *q)
 {
-    /* TODO: You need to write the code for this function */
-    /* TODO: Remove the above comment when you are about to implement. */
+    if (q && q->size > 1) {
+        mergesort(&q->head);
+        list_ele_t *tmp = q->head;
+        while (tmp->next) {
+            tmp = tmp->next;
+        }
+        q->tail = tmp;
+    }
 }

@@ -47,12 +47,9 @@ bool q_insert_head(queue_t *q, char *s)
 {
     if (!q)
         return false;
-    /* What if either call to malloc returns NULL? */
     list_ele_t *newh = malloc(sizeof(list_ele_t));
     if (newh) {
-        size_t size = 1;
-        for (char *it = s; *it != '\0'; it++)
-            size++;
+        size_t size = strlen(s) + 1;
         newh->value = malloc(sizeof(char) * size);
         if (newh->value) {
             memcpy(newh->value, s, size);
@@ -84,9 +81,7 @@ bool q_insert_tail(queue_t *q, char *s)
     list_ele_t *newt = malloc(sizeof(list_ele_t));
     if (newt) {
         newt->next = NULL;
-        size_t size = 1;
-        for (char *it = s; *it != '\0'; it++)
-            size++;
+        size_t size = strlen(s) + 1;
         newt->value = malloc(sizeof(char) * size);
         if (newt->value) {
             memcpy(newt->value, s, size);
@@ -118,10 +113,7 @@ bool q_remove_head(queue_t *q, char *sp, size_t bufsize)
     if (!q || q->size == 0)
         return false;
     if (sp) {
-        size_t size = 1;
-        char *it;
-        for (it = q->head->value; *it != '\0'; it++)
-            size++;
+        size_t size = strlen(q->head->value) + 1;
         if (size > bufsize) {
             memcpy(sp, q->head->value, bufsize - 1);
             sp[bufsize - 1] = '\0';

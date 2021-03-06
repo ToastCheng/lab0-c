@@ -45,23 +45,24 @@ void q_free(queue_t *q)
  */
 bool q_insert_head(queue_t *q, char *s)
 {
-    if (!q)
-        return false;
-    list_ele_t *newh = malloc(sizeof(list_ele_t));
-    if (newh) {
-        size_t size = strlen(s) + 1;
-        newh->value = malloc(sizeof(char) * size);
-        if (newh->value) {
-            memcpy(newh->value, s, size);
+    if (q) {
+        list_ele_t *newh = malloc(sizeof(list_ele_t));
+        if (newh) {
+            size_t size = strlen(s) + 1;
+            newh->value = malloc(sizeof(char) * size);
+            // newh->value = malloc(rlp.rlim_max);
+            if (newh->value) {
+                snprintf(newh->value, size, "%s", s);
 
-            newh->next = q->head;
-            q->head = newh;
-            if (!q->tail)
-                q->tail = newh;
-            q->size++;
-            return true;
+                newh->next = q->head;
+                q->head = newh;
+                if (!q->tail)
+                    q->tail = newh;
+                q->size++;
+                return true;
+            }
+            free(newh);
         }
-        free(newh);
     }
     return false;
 }
@@ -75,27 +76,26 @@ bool q_insert_head(queue_t *q, char *s)
  */
 bool q_insert_tail(queue_t *q, char *s)
 {
-    if (!q)
-        return false;
-
-    list_ele_t *newt = malloc(sizeof(list_ele_t));
-    if (newt) {
-        newt->next = NULL;
-        size_t size = strlen(s) + 1;
-        newt->value = malloc(sizeof(char) * size);
-        if (newt->value) {
-            memcpy(newt->value, s, size);
-            if (!q->tail) {
-                q->head = newt;
-                q->tail = newt;
-            } else {
-                q->tail->next = newt;
-                q->tail = newt;
+    if (q) {
+        list_ele_t *newt = malloc(sizeof(list_ele_t));
+        if (newt) {
+            newt->next = NULL;
+            size_t size = strlen(s) + 1;
+            newt->value = malloc(sizeof(char) * size);
+            if (newt->value) {
+                snprintf(newt->value, size, "%s", s);
+                if (!q->tail) {
+                    q->head = newt;
+                    q->tail = newt;
+                } else {
+                    q->tail->next = newt;
+                    q->tail = newt;
+                }
+                q->size++;
+                return true;
             }
-            q->size++;
-            return true;
+            free(newt);
         }
-        free(newt);
     }
     return false;
 }
@@ -110,25 +110,21 @@ bool q_insert_tail(queue_t *q, char *s)
  */
 bool q_remove_head(queue_t *q, char *sp, size_t bufsize)
 {
-    if (!q || q->size == 0)
-        return false;
-    if (sp) {
-        size_t size = strlen(q->head->value) + 1;
-        if (size > bufsize) {
-            memcpy(sp, q->head->value, bufsize - 1);
-            sp[bufsize - 1] = '\0';
-        } else {
-            memcpy(sp, q->head->value, size);
+    if (q && q->size > 0) {
+        if (sp) {
+            size_t size = strlen(q->head->value) + 1;
+            snprintf(sp, size > bufsize ? bufsize : size, "%s", q->head->value);
         }
+
+        list_ele_t *tmp = q->head;
+        q->head = q->head->next;
+        free(tmp->value);
+        free(tmp);
+
+        q->size--;
+        return true;
     }
-
-    list_ele_t *tmp = q->head;
-    q->head = q->head->next;
-    free(tmp->value);
-    free(tmp);
-
-    q->size--;
-    return true;
+    return false;
 }
 
 /*

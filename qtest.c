@@ -34,10 +34,13 @@
 #include "console.h"
 #include "report.h"
 
+#include "tiny.h"
+
 /* Settable parameters */
 
 #define HISTORY_LEN 20
-
+#define QUEUE_INFO_LEN 256
+#define RESP_BUF_LEN 256
 /*
  * How large is a queue before it's considered big.
  * This affects how it gets printed
@@ -76,6 +79,73 @@ static bool do_reverse(int argc, char *argv[]);
 static bool do_size(int argc, char *argv[]);
 static bool do_sort(int argc, char *argv[]);
 static bool do_show(int argc, char *argv[]);
+static bool do_web(int argc, char *argv[]);
+static void start_server();
+void handle_command(int out_fd, char *cmd);
+void process(int fd, struct sockaddr_in *clientaddr);
+static void write_queue_info(char *buf);
+
+
+void handle_command(int out_fd, char *cmd)
+{
+    printf("receiving command: %s\n", cmd);
+    interpret_cmd(cmd);
+    char info[QUEUE_INFO_LEN];
+    write_queue_info(info);
+
+    char buf[RESP_BUF_LEN];
+    snprintf(buf, RESP_BUF_LEN - strlen(buf) - 1, "HTTP/1.1 200 OK\r\n");
+    snprintf(buf + strlen(buf), RESP_BUF_LEN - strlen(buf) - 1,
+             "Content-Type: text/plain\r\n\r\n");
+    snprintf(buf + strlen(buf), RESP_BUF_LEN - strlen(buf) - 1, "%s\r\n", info);
+    writen(out_fd, buf, strlen(buf));
+    close(out_fd);
+}
+
+void process(int fd, struct sockaddr_in *clientaddr)
+{
+    http_request req;
+    parse_request(fd, &req);
+    handle_command(fd, req.command);
+}
+
+void start_server()
+{
+    struct sockaddr_in clientaddr;
+    int default_port = DEFAULT_PORT, listenfd, connfd;
+    socklen_t clientlen = sizeof clientaddr;
+
+
+    listenfd = open_listenfd(default_port);
+    if (listenfd > 0) {
+        printf("listen on port %d, fd is %d\n", default_port, listenfd);
+    } else {
+        perror("ERROR");
+        exit(listenfd);
+    }
+
+    int i = 0;
+    for (; i < FORK_COUNT; i++) {
+        int pid = fork();
+        if (pid == 0) {  //  child
+            while (1) {
+                connfd = accept(listenfd, (SA *) &clientaddr, &clientlen);
+                process(connfd, &clientaddr);
+                close(connfd);
+            }
+        } else if (pid > 0) {  //  parent
+            printf("child pid is %d\n", pid);
+        } else {
+            perror("fork");
+        }
+    }
+
+    while (1) {
+        connfd = accept(listenfd, (SA *) &clientaddr, &clientlen);
+        process(connfd, &clientaddr);
+        close(connfd);
+    }
+}
 
 static void queue_init();
 
@@ -99,6 +169,7 @@ static void console_init()
     add_cmd("sort", do_sort, "                | Sort queue in ascending order");
     add_cmd("size", do_size,
             " [n]            | Compute queue size n times (default: n == 1)");
+    add_cmd("web", do_web, "                | Start a web server");
     add_cmd("show", do_show, "                | Show queue contents");
     add_param("length", &string_length, "Maximum length of displayed string",
               NULL);
@@ -572,6 +643,51 @@ bool do_sort(int argc, char *argv[])
     return ok && !error_check();
 }
 
+static void write_queue_info(char *buf)
+{
+    bool ok = true;
+    int cnt = 0;
+    if (!q) {
+        snprintf(buf, QUEUE_INFO_LEN - strlen(buf) - 1, "q = NULL");
+        return;
+    }
+
+    snprintf(buf, QUEUE_INFO_LEN - strlen(buf) - 1, "q = [");
+    list_ele_t *e = q->head;
+    if (exception_setup(true)) {
+        while (ok && e && cnt < qcnt) {
+            if (cnt < big_queue_size)
+                snprintf(buf + strlen(buf), QUEUE_INFO_LEN - strlen(buf) - 1,
+                         cnt == 0 ? "%s" : " %s", e->value);
+
+            e = e->next;
+            cnt++;
+            ok = ok && !error_check();
+        }
+    }
+    exception_cancel();
+
+    if (!ok) {
+        snprintf(buf + strlen(buf), QUEUE_INFO_LEN - strlen(buf) - 1, " ... ]");
+        return;
+    }
+
+    if (!e) {
+        if (cnt <= big_queue_size)
+            snprintf(buf + strlen(buf), QUEUE_INFO_LEN - strlen(buf) - 1, "]");
+        else
+            snprintf(buf + strlen(buf), QUEUE_INFO_LEN - strlen(buf) - 1,
+                     " ... ]");
+
+    } else {
+        snprintf(buf + strlen(buf), QUEUE_INFO_LEN - strlen(buf) - 1, " ... ]");
+        snprintf(buf + strlen(buf), QUEUE_INFO_LEN - strlen(buf) - 1,
+                 "ERROR:  Either list has cycle, or queue has more than %zu "
+                 "elements",
+                 qcnt);
+    }
+}
+
 static bool show_queue(int vlevel)
 {
     bool ok = true;
@@ -628,6 +744,13 @@ static bool do_show(int argc, char *argv[])
     return show_queue(0);
 }
 
+static bool do_web(int argc, char *argv[])
+{
+    report(3, "start server..");
+    start_server();
+    return true;
+}
+
 /* Signal handlers */
 static void sigsegvhandler(int sig)
 {
@@ -651,6 +774,7 @@ static void queue_init()
     q = NULL;
     signal(SIGSEGV, sigsegvhandler);
     signal(SIGALRM, sigalrmhandler);
+    signal(SIGPIPE, SIG_IGN);
 }
 
 static bool queue_quit(int argc, char *argv[])
@@ -777,7 +901,6 @@ int main(int argc, char *argv[])
         set_logfile(logfile_name);
 
     add_quit_helper(queue_quit);
-
     bool ok = true;
     ok = ok && run_console(infile_name);
     ok = ok && finish_cmd();

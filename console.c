@@ -231,7 +231,7 @@ static bool interpret_cmda(int argc, char *argv[])
 }
 
 /* Execute a command from a command line */
-static bool interpret_cmd(char *cmdline)
+bool interpret_cmd(char *cmdline)
 {
     if (quit_flag)
         return false;

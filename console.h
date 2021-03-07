@@ -78,6 +78,8 @@ int cmd_select(int nfds,
  */
 bool run_console(char *infile_name);
 
+bool interpret_cmd(char *cmdline);
+
 /* Callback function to complete command by linenoise */
 void completion(const char *buf, linenoiseCompletions *lc);
 

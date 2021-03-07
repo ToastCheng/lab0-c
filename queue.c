@@ -163,30 +163,10 @@ void q_reverse(queue_t *q)
     }
 }
 
-int comp(char *a, char *b)
-{
-    while (true) {
-        if (*a == '\0' && *b == '\0') {
-            return 0;
-        } else if (*a == '\0') {
-            return -1;
-        } else if (*b == '\0') {
-            return 1;
-        }
-        if (*a > *b) {
-            return 1;
-        } else if (*a < *b) {
-            return -1;
-        }
-        a++;
-        b++;
-    }
-}
-
 void merge(list_ele_t **result, list_ele_t *left, list_ele_t *right)
 {
     while (left && right) {
-        if (comp(left->value, right->value) > 0) {
+        if (strcmp(left->value, right->value) > 0) {
             *result = right;
             right = right->next;
         } else {
@@ -196,17 +176,7 @@ void merge(list_ele_t **result, list_ele_t *left, list_ele_t *right)
         result = &((*result)->next);
     }
 
-    while (left) {
-        *result = left;
-        left = left->next;
-        result = &((*result)->next);
-    }
-
-    while (right) {
-        *result = right;
-        right = right->next;
-        result = &((*result)->next);
-    }
+    *result = right ? right : left;
 }
 
 void mergesort(list_ele_t **head)

@@ -1,6 +1,7 @@
 /* Implementation of testing code for queue code */
 
 #include <getopt.h>
+#include <setjmp.h>
 #include <signal.h>
 #include <spawn.h>
 #include <stdio.h>
@@ -11,6 +12,7 @@
 #include <sys/wait.h>
 #include <time.h>
 #include <unistd.h>
+
 #include "dudect/fixture.h"
 
 /* Our program needs to use regular malloc/free */
@@ -57,11 +59,20 @@ static queue_t *q = NULL;
 /* Number of elements in queue */
 static size_t qcnt = 0;
 
+static bool is_cmd = true;
+static jmp_buf cmd_buf;
+static jmp_buf web_buf;
+
+
 /* How many times can queue operations fail */
 static int fail_limit = BIG_QUEUE;
 static int fail_count = 0;
 
 static int string_length = MAXSTRING;
+
+struct sockaddr_in clientaddr;
+static int listenfd;
+
 
 #define MIN_RANDSTR_LEN 5
 #define MAX_RANDSTR_LEN 10
@@ -81,15 +92,16 @@ static bool do_sort(int argc, char *argv[]);
 static bool do_show(int argc, char *argv[]);
 static bool do_web(int argc, char *argv[]);
 static void start_server();
-void handle_command(int out_fd, char *cmd);
-void process(int fd, struct sockaddr_in *clientaddr);
+void handle_command(int out_fd);
 static void write_queue_info(char *buf);
 
 
-void handle_command(int out_fd, char *cmd)
+void handle_command(int out_fd)
 {
-    printf("receiving command: %s\n", cmd);
-    interpret_cmd(cmd);
+    http_request req;
+    parse_request(out_fd, &req);
+    printf("receiving command: %s\n", req.command);
+    interpret_cmd(req.command);
     char info[QUEUE_INFO_LEN];
     write_queue_info(info);
 
@@ -101,49 +113,25 @@ void handle_command(int out_fd, char *cmd)
     close(out_fd);
 }
 
-void process(int fd, struct sockaddr_in *clientaddr)
-{
-    http_request req;
-    parse_request(fd, &req);
-    handle_command(fd, req.command);
-}
-
 void start_server()
 {
-    struct sockaddr_in clientaddr;
-    int default_port = DEFAULT_PORT, listenfd, connfd;
+    int default_port = DEFAULT_PORT, connfd;
     socklen_t clientlen = sizeof clientaddr;
 
 
     listenfd = open_listenfd(default_port);
     if (listenfd > 0) {
-        printf("listen on port %d, fd is %d\n", default_port, listenfd);
+        report(3, "listen on port %d, fd is %d", default_port, listenfd);
     } else {
         perror("ERROR");
         exit(listenfd);
     }
 
-    int i = 0;
-    for (; i < FORK_COUNT; i++) {
-        int pid = fork();
-        if (pid == 0) {  //  child
-            while (1) {
-                connfd = accept(listenfd, (SA *) &clientaddr, &clientlen);
-                process(connfd, &clientaddr);
-                close(connfd);
-            }
-        } else if (pid > 0) {  //  parent
-            printf("child pid is %d\n", pid);
-        } else {
-            perror("fork");
-        }
-    }
-
-    while (1) {
-        connfd = accept(listenfd, (SA *) &clientaddr, &clientlen);
-        process(connfd, &clientaddr);
-        close(connfd);
-    }
+    if (setjmp(web_buf) > 0)
+        report(3, "back to server, serving..");
+    connfd = accept(listenfd, (SA *) &clientaddr, &clientlen);
+    handle_command(connfd);
+    close(connfd);
 }
 
 static void queue_init();
@@ -318,6 +306,8 @@ static bool do_insert_head(int argc, char *argv[])
     exception_cancel();
 
     show_queue(3);
+    is_cmd = !is_cmd;
+    longjmp(is_cmd ? cmd_buf : web_buf, 1);
     return ok;
 }
 
@@ -389,6 +379,8 @@ static bool do_insert_tail(int argc, char *argv[])
     }
     exception_cancel();
     show_queue(3);
+    is_cmd = !is_cmd;
+    longjmp(is_cmd ? cmd_buf : web_buf, 1);
     return ok;
 }
 
@@ -900,6 +892,9 @@ int main(int argc, char *argv[])
         set_logfile(logfile_name);
 
     add_quit_helper(queue_quit);
+
+    if (setjmp(cmd_buf) > 0)
+        report(3, "back to command line..");
     bool ok = true;
     ok = ok && run_console(infile_name);
     ok = ok && finish_cmd();

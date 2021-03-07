@@ -93,11 +93,10 @@ void handle_command(int out_fd, char *cmd)
     char info[QUEUE_INFO_LEN];
     write_queue_info(info);
 
-    char buf[RESP_BUF_LEN];
-    snprintf(buf, RESP_BUF_LEN - strlen(buf) - 1, "HTTP/1.1 200 OK\r\n");
-    snprintf(buf + strlen(buf), RESP_BUF_LEN - strlen(buf) - 1,
-             "Content-Type: text/plain\r\n\r\n");
-    snprintf(buf + strlen(buf), RESP_BUF_LEN - strlen(buf) - 1, "%s\r\n", info);
+    char buf[512];
+    snprintf(buf, 18, "HTTP/1.1 200 OK\r\n");
+    snprintf(buf + strlen(buf), 29, "Content-Type: text/plain\r\n\r\n");
+    snprintf(buf + strlen(buf), QUEUE_INFO_LEN + 2, "%s\r\n", info);
     writen(out_fd, buf, strlen(buf));
     close(out_fd);
 }
